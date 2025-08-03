@@ -1,32 +1,84 @@
 import React from "react";
+import { useNavigate } from "react-router";
 import FileUploader from "~/components/FileUploader";
 import Navbar from "~/components/Navbar";
+import { convertPdfToImage } from "~/lib/pdf2img";
+import { usePuterStore } from "~/lib/puter";
+import { generateUUID } from "~/lib/utils";
 
 const Upload = () => {
+  const { auth, isLoading, fs, ai, kv } = usePuterStore();
+  const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [statusText, setStatusText] = React.useState("");
-  const [file, setFile] = React.useState<File | null>(null)
+  const [file, setFile] = React.useState<File | null>(null);
 
   const handleFileSelect = (file: File | null) => {
-    setFile(file)
-  }
+    setFile(file);
+  };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const form = e.currentTarget.closest('form')
-    if(!form) return
-    const formData = new FormData(form)
+  const handleAnalyze = async ({
+    companyName,
+    jobTitle,
+    jobDescription,
+    file,
+  }: {
+    companyName: string;
+    jobTitle: String;
+    jobDescription: string;
+    file: File;
+  }) => {
+    setIsProcessing(true);
+    setStatusText("Uploading the file...");
 
-    const companyName = formData.get('company-name')
-    const jobTitle = formData.get('job-title')
-    const jobDescription = formData.get('job-description')
+    const uploadedFile = await fs.upload([file]);
 
-    console.log({
+    if (!uploadedFile) return setStatusText("Error: Failed to upload file");
+
+    setStatusText("Converting to image...");
+    const imageFile = await convertPdfToImage(file);
+    if (!imageFile.file)
+      return setStatusText("Error: Failed to convert PDF to image");
+
+    setStatusText("Uploading the image...");
+    const uploadedImage = await fs.upload([imageFile.file]);
+    if (!uploadedImage) return setStatusText("Error: failed to uploaded image");
+
+    setStatusText("Preparing data...");
+
+    const uuid = generateUUID();
+    const data = {
+      id: uuid,
+      resumePath: uploadedFile.path,
+      imagePath: uploadedImage.path,
       companyName,
       jobTitle,
       jobDescription,
-      file 
-    })
+      feedback: "",
+    };
+    await kv.set(`resume:${uuid}`, JSON.stringify(data))
+
+    setStatusText('Analyzing...')
+
+    const feedback = await ai.feedback(
+      uploadedFile.path,
+      `Your are an expert in ATS (applicant tracking system) and resume analysis...` //1:28:36
+    )
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget.closest("form");
+    if (!form) return;
+    const formData = new FormData(form);
+
+    const companyName = formData.get("company-name") as string;
+    const jobTitle = formData.get("job-title") as string;
+    const jobDescription = formData.get("job-description") as string;
+
+    if (!file) return;
+
+    handleAnalyze({ companyName, jobTitle, jobDescription, file });
   };
 
   return (
@@ -81,11 +133,11 @@ const Upload = () => {
 
               <div className="form-div">
                 <label htmlFor="uploader">Upload Resume</label>
-                <FileUploader onFileSelect={handleFileSelect}/>
+                <FileUploader onFileSelect={handleFileSelect} />
               </div>
 
               <button className="primary-button" type="submit">
-                Analyze Resume 
+                Analyze Resume
               </button>
             </form>
           )}
