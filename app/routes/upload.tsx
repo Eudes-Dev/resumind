@@ -5,6 +5,7 @@ import Navbar from "~/components/Navbar";
 import { convertPdfToImage } from "~/lib/pdf2img";
 import { usePuterStore } from "~/lib/puter";
 import { generateUUID } from "~/lib/utils";
+import { prepareInstructions } from "../../constants";
 
 const Upload = () => {
   const { auth, isLoading, fs, ai, kv } = usePuterStore();
@@ -24,7 +25,7 @@ const Upload = () => {
     file,
   }: {
     companyName: string;
-    jobTitle: String;
+    jobTitle: string;
     jobDescription: string;
     file: File;
   }) => {
@@ -56,14 +57,25 @@ const Upload = () => {
       jobDescription,
       feedback: "",
     };
-    await kv.set(`resume:${uuid}`, JSON.stringify(data))
+    await kv.set(`resume:${uuid}`, JSON.stringify(data));
 
-    setStatusText('Analyzing...')
+    setStatusText("Analyzing...");
 
     const feedback = await ai.feedback(
       uploadedFile.path,
-      `Your are an expert in ATS (applicant tracking system) and resume analysis...` //1:28:36
-    )
+      prepareInstructions({ jobTitle, jobDescription })
+    );
+    if (!feedback) return setStatusText("Error: Failed to analyze resume");
+
+    const feedbackText =
+      typeof feedback.message.content === "string"
+        ? feedback.message.content
+        : feedback.message.content[0].text;
+
+    data.feedback = JSON.parse(feedbackText);
+    await kv.set(`resume:${uuid}`, JSON.stringify(data))
+    setStatusText('Analysis complete, redirecting...')
+    console.log(data)
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
