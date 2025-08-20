@@ -68,7 +68,7 @@ const Resume = () => {
                 <img
                   src={imageUrl}
                   alt="image"
-                  className="w-full object-contain rounded-2xl"
+                  className="w-full object-contain rounded-2xl h-full"
                   title="resume"
                 />
               </a>
